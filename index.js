@@ -426,19 +426,42 @@ class Downloader {
 
   async downloadInstagramReel(url) {
     try {
-      const videoData = await this.getInstagramUrl(url);
-      const fetch = (await import("node-fetch")).default;
-      const response = await fetch(videoData.url);
-      const buffer = await response.buffer();
-      const filename = `downloads/instagram_reel_${Date.now()}.mp4`;
-      await fs.promises.writeFile(filename, buffer);
-      return {
-        filename,
-        metadata: videoData.metadata
-      };
+      const filename = `downloads/instagram_${Date.now()}.mp4`;
+      console.log("Trying yt-dlp for Instagram download:", url);
+
+      try {
+        const infoCommand = `yt-dlp "${url}" --dump-json`;
+        const { stdout: infoStdout } = await execPromise(infoCommand);
+        const info = JSON.parse(infoStdout);
+
+        const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "best"`;
+        await execPromise(downloadCommand);
+
+        if (!fs.existsSync(filename)) {
+          throw new Error("No media file found");
+        }
+
+        return {
+          filename,
+          metadata: {
+            title: info.title || "Instagram Video",
+            uploader: info.uploader,
+            likeCount: info.like_count,
+            viewCount: info.view_count,
+            commentCount: info.comment_count,
+            thumbnail: info.thumbnail,
+            duration: info.duration,
+            description: info.description,
+            uploadDate: info.upload_date
+          }
+        };
+      } catch (ytdlpError) {
+        console.log('yt-dlp failed, falling back to gallery-dl:', ytdlpError.message);
+        return this.downloadInstagramMedia(url);
+      }
     } catch (error) {
-      console.log('API download failed, falling back to gallery-dl');
-      return this.downloadInstagramMedia(url);
+      console.error("Instagram download error:", error);
+      throw error;
     }
   }
 
