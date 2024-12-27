@@ -517,13 +517,14 @@ class Downloader {
   async downloadYoutubeVideo(url) {
     try {
       const filename = `downloads/youtube_${Date.now()}.mp4`;
-      console.log("Executing yt-dlp command:", `yt-dlp "${url}" --dump-json`);
+      console.log("Executing yt-dlp command for YouTube download:", url);
 
       const infoCommand = `yt-dlp "${url}" --dump-json`;
       const { stdout: infoStdout } = await execPromise(infoCommand);
       const info = JSON.parse(infoStdout);
 
-      const downloadCommand = `yt-dlp "${url}" -o "${filename}" --format "best" --no-check-certificates --extractor-args "youtube:player_client=web" --add-header "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"`;
+      const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "bv*+ba/b" --no-check-certificates --extractor-args "youtube:player_client=android" --add-header "User-Agent:com.google.android.youtube/17.31.35 (Linux; U; Android 11)"`;
+      
       await execPromise(downloadCommand);
 
       if (!fs.existsSync(filename)) {
