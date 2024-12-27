@@ -523,7 +523,7 @@ class Downloader {
       const { stdout: infoStdout } = await execPromise(infoCommand);
       const info = JSON.parse(infoStdout);
 
-      const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "bv*+ba/b" --no-check-certificates --extractor-args "youtube:player_client=android" --add-header "User-Agent:com.google.android.youtube/17.31.35 (Linux; U; Android 11)"`;
+      const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "bv*+ba/b" --no-check-certificates --extractor-args "youtube:player_client=android" --add-header "User-Agent:com.google.android.youtube/17.31.35 (Linux; U; Android 11)" --force-ipv4 --no-warnings --extractor-args "youtube:formats=missing_pot"`;
       
       await execPromise(downloadCommand);
 
@@ -547,7 +547,37 @@ class Downloader {
       };
     } catch (error) {
       console.error("yt-dlp error:", error);
-      throw new Error(`Download failed: ${error.message}`);
+      
+      try {
+        console.log("Attempting fallback download method...");
+        const fallbackCommand = `yt-dlp "${url}" -o "${filename}" --format "mp4" --no-check-certificates --force-ipv4 --no-warnings --extractor-args "youtube:formats=missing_pot"`;
+        await execPromise(fallbackCommand);
+        
+        if (!fs.existsSync(filename)) {
+          throw new Error("Fallback download failed: File not found");
+        }
+
+        const { stdout: infoStdout } = await execPromise(`yt-dlp "${url}" --dump-json`);
+        const info = JSON.parse(infoStdout);
+
+        return {
+          filename,
+          metadata: {
+            title: info.title,
+            uploader: info.uploader,
+            uploadDate: info.upload_date,
+            duration: info.duration,
+            viewCount: info.view_count,
+            likeCount: info.like_count,
+            description: info.description,
+            thumbnail: info.thumbnail,
+            quality: "mp4"
+          }
+        };
+      } catch (fallbackError) {
+        console.error("Fallback download failed:", fallbackError);
+        throw new Error(`Download failed: ${error.message}`);
+      }
     }
   }
 
