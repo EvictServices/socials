@@ -1504,6 +1504,25 @@ app.post("/download", authMiddleware, async (req, res) => {
     const downloader = new Downloader();
     const resolvedUrl = await downloader.resolveUrl(url);
 
+    if (resolvedUrl.includes("/photo/")) {
+      console.log("Detected photo post, downloading images...");
+      const photoData = await downloader.downloadPhotos(resolvedUrl);
+
+      const photoUrls = photoData.map(photo => {
+        return {
+          url: `${req.protocol}://${req.get("host")}/${photo.filename}`,
+          metadata: photo.metadata
+        };
+      });
+
+      return res.json({
+        success: true,
+        type: "photo",
+        photos: photoUrls,
+        metadata: photoData[0].metadata
+      });
+    }
+
     if (resolvedUrl.includes("twitter.com") || resolvedUrl.includes("x.com")) {
       console.log("Detected Twitter URL, fetching media...");
       const mediaData = await downloader.downloadTwitterMedia(resolvedUrl);
@@ -1719,26 +1738,6 @@ app.post("/download", authMiddleware, async (req, res) => {
           fileName: path.basename(reelData.filename),
           fileSize: fs.statSync(reelData.filename).size,
           outputPath: reelData.filename,
-        },
-      });
-    }
-
-    if (resolvedUrl.includes("/photo/")) {
-      console.log("Detected photo post, fetching image URLs...");
-      const photoData = await downloader.getPhotoUrls(resolvedUrl);
-
-      return res.json({
-        success: true,
-        type: "photo",
-        urls: photoData.urls,
-        metadata: {
-          title: photoData.metadata.title,
-          uploader: photoData.metadata.uploader,
-          stats: {
-            likes: photoData.metadata.likeCount,
-            views: photoData.metadata.viewCount,
-            comments: photoData.metadata.commentCount,
-          },
         },
       });
     }
