@@ -515,10 +515,10 @@ class Downloader {
   }
 
   async downloadYoutubeVideo(url) {
-    try {
-      const filename = `downloads/youtube_${Date.now()}.mp4`;
-      console.log("Executing yt-dlp command for YouTube download:", url);
+    const filename = `downloads/youtube_${Date.now()}.mp4`;
+    console.log("Executing yt-dlp command for YouTube download:", url);
 
+    try {
       const infoCommand = `yt-dlp "${url}" --dump-json`;
       const { stdout: infoStdout } = await execPromise(infoCommand);
       const info = JSON.parse(infoStdout);
