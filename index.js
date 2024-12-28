@@ -428,9 +428,8 @@ class Downloader {
     try {
       const filename = `downloads/instagram_${Date.now()}.mp4`;
       console.log("Trying yt-dlp for Instagram download:", url);
-
+  
       try {
-        // First attempt: Standard yt-dlp
         const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "best"`;
         await execPromise(downloadCommand);
       } catch (ytdlpError) {
@@ -441,33 +440,38 @@ class Downloader {
         } catch (galleryError) {
           console.log('gallery-dl failed, trying yt-dlp with cookies:', galleryError.message);
           
-          const cookieCommand = `yt-dlp "${url}" -o "${filename}" -f "best" --cookies instagram_cookies.txt`;
-          await execPromise(cookieCommand);
+          try {
+            const cookieCommand = `yt-dlp "${url}" -o "${filename}" -f "best" --cookies instagram_cookies.txt`;
+            await execPromise(cookieCommand);
+            
+            if (!fs.existsSync(filename)) {
+              throw new Error("No media file found after cookie attempt");
+            }
+  
+            const infoCommand = `yt-dlp "${url}" --dump-json --cookies instagram_cookies.txt`;
+            const { stdout: infoStdout } = await execPromise(infoCommand);
+            const info = JSON.parse(infoStdout);
+  
+            return {
+              filename,
+              metadata: {
+                title: info.title || "Instagram Video",
+                uploader: info.uploader,
+                likeCount: info.like_count,
+                viewCount: info.view_count,
+                commentCount: info.comment_count,
+                thumbnail: info.thumbnail,
+                duration: info.duration,
+                description: info.description,
+                uploadDate: info.upload_date
+              }
+            };
+          } catch (cookieError) {
+            console.error("All download methods failed:", cookieError);
+            throw new Error("Failed to download Instagram media after all attempts");
+          }
         }
       }
-
-      if (!fs.existsSync(filename)) {
-        throw new Error("No media file found");
-      }
-
-      const infoCommand = `yt-dlp "${url}" --dump-json`;
-      const { stdout: infoStdout } = await execPromise(infoCommand);
-      const info = JSON.parse(infoStdout);
-
-      return {
-        filename,
-        metadata: {
-          title: info.title || "Instagram Video",
-          uploader: info.uploader,
-          likeCount: info.like_count,
-          viewCount: info.view_count,
-          commentCount: info.comment_count,
-          thumbnail: info.thumbnail,
-          duration: info.duration,
-          description: info.description,
-          uploadDate: info.upload_date
-        }
-      };
     } catch (error) {
       console.error("Instagram download error:", error);
       throw error;
