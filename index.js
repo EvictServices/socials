@@ -105,6 +105,8 @@ class Downloader {
       fs.mkdirSync(this.downloadsDir);
     }
     this.startCleanupSchedule();
+    this.cache = new Map();
+    this.cacheTimeout = 3600000; 
   }
 
   startCleanupSchedule() {
@@ -426,6 +428,12 @@ class Downloader {
 
   async downloadInstagramReel(url) {
     try {
+      const cachedResult = this.cache.get(url);
+      if (cachedResult && Date.now() - cachedResult.timestamp < this.cacheTimeout) {
+        console.log("Returning cached Instagram result");
+        return cachedResult.data;
+      }
+
       const filename = `downloads/instagram_${Date.now()}.mp4`;
       console.log("Trying yt-dlp for Instagram download:", url);
 
@@ -447,7 +455,7 @@ class Downloader {
           const { stdout: infoStdout } = await execPromise(infoCommand);
           const info = JSON.parse(infoStdout);
 
-          return {
+          const result = {
             filename,
             metadata: {
               title: info.title || "Instagram Video",
@@ -461,6 +469,13 @@ class Downloader {
               uploadDate: info.upload_date
             }
           };
+
+          this.cache.set(url, {
+            timestamp: Date.now(),
+            data: result
+          });
+
+          return result;
         } catch (cookieError) {
           console.error("All download methods failed:", cookieError);
           throw new Error("Failed to download Instagram media after all attempts");
