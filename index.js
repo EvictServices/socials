@@ -580,43 +580,41 @@ class Downloader {
         })
       ]);
 
-      console.log("Got video and audio streams, downloading...");
+      console.log("Got stream URLs, downloading...");
 
-      let videoBytes = 0;
-      let audioBytes = 0;
+      const downloadFile = async (url, outputPath, type) => {
+        const response = await axios({
+          url,
+          method: 'GET',
+          responseType: 'stream',
+          timeout: 30000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          }
+        });
 
-      video.stream.on('data', chunk => {
-        videoBytes += chunk.length;
-        console.log(`Video download progress: ${(videoBytes / 1024 / 1024).toFixed(2)} MB`);
-      });
+        const writer = fs.createWriteStream(outputPath);
+        const totalLength = response.headers['content-length'];
 
-      audio.stream.on('data', chunk => {
-        audioBytes += chunk.length;
-        console.log(`Audio download progress: ${(audioBytes / 1024 / 1024).toFixed(2)} MB`);
-      });
+        response.data.pipe(writer);
 
-      const downloadWithTimeout = async (stream, output, type) => {
+        let downloaded = 0;
+        response.data.on('data', (chunk) => {
+          downloaded += chunk.length;
+          const percent = ((downloaded / totalLength) * 100).toFixed(2);
+          console.log(`${type} download progress: ${percent}%`);
+        });
+
         return new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error(`${type} download timed out after 60 seconds`));
-          }, 60000);
-
-          pipeline(stream, fs.createWriteStream(output))
-            .then(() => {
-              clearTimeout(timeout);
-              console.log(`${type} download complete`);
-              resolve();
-            })
-            .catch(err => {
-              clearTimeout(timeout);
-              reject(err);
-            });
+          writer.on('finish', resolve);
+          writer.on('error', reject);
         });
       };
 
+      console.log("Starting downloads...");
       await Promise.all([
-        downloadWithTimeout(video.stream, tempVideo, 'Video'),
-        downloadWithTimeout(audio.stream, tempAudio, 'Audio')
+        downloadFile(video.url, tempVideo, 'Video'),
+        downloadFile(audio.url, tempAudio, 'Audio')
       ]);
 
       console.log("Downloads complete, merging files...");
