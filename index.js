@@ -557,14 +557,34 @@ class Downloader {
 
   async downloadYoutubeVideo(url) {
     try {
-      const filename = `downloads/youtube_${Date.now()}.mp4`;
+      const downloadDir = path.join(process.cwd(), 'downloads');
+      if (!fs.existsSync(downloadDir)) {
+        fs.mkdirSync(downloadDir, { recursive: true });
+      }
+
+      const baseFilename = path.join(downloadDir, `youtube_${Date.now()}`);
       console.log("Downloading YouTube video:", url);
 
-      const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --no-warnings`;
+      const downloadCommand = `yt-dlp "${url}" -o "${baseFilename}.%(ext)s" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --no-warnings --merge-output-format mp4`;
       await exec(downloadCommand);
       
+      const mp4File = `${baseFilename}.mp4`;
+      const webmFile = `${baseFilename}.webm`;
+      
+      let finalFilename;
+      if (fs.existsSync(mp4File)) {
+        finalFilename = mp4File;
+      } else if (fs.existsSync(webmFile)) {
+        const convertCommand = `ffmpeg -i "${webmFile}" -c copy "${mp4File}" -y`;
+        await exec(convertCommand);
+        fs.unlinkSync(webmFile); 
+        finalFilename = mp4File;
+      } else {
+        throw new Error('Download completed but file not found');
+      }
+
       return {
-        filename,
+        filename: finalFilename,
         metadata: {
           title: "YouTube Video",
           quality: "1080p"
