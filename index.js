@@ -569,32 +569,62 @@ class Downloader {
       const info = await play.video_info(url);
       console.log("Got video info, starting download...");
       
+      const getStreamWithTimeout = async (streamPromise) => {
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Stream timeout')), 10000);
+        });
+        return Promise.race([streamPromise, timeoutPromise]);
+      };
+
       const [video, audio] = await Promise.all([
-        play.stream_from_info(info, { 
+        getStreamWithTimeout(play.stream_from_info(info, { 
           quality: 137, 
           type: 'videoonly' 
-        }),
-        play.stream_from_info(info, { 
+        })),
+        getStreamWithTimeout(play.stream_from_info(info, { 
           quality: 140, 
           type: 'audioonly' 
-        })
+        }))
       ]);
 
       console.log("Got streams, downloading...");
 
       const downloadStream = async (stream, outputPath, type) => {
         return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            stream.stream.destroy();
+            reject(new Error(`${type} download timeout`));
+          }, 30000);
+
           const fileStream = fs.createWriteStream(outputPath);
           let downloaded = 0;
+          let lastProgress = Date.now();
 
           stream.stream.on('data', (chunk) => {
             downloaded += chunk.length;
-            console.log(`${type} download progress: ${(downloaded / 1024 / 1024).toFixed(2)} MB`);
+            const now = Date.now();
+            if (now - lastProgress > 1000) { 
+              console.log(`${type} download progress: ${(downloaded / 1024 / 1024).toFixed(2)} MB`);
+              lastProgress = now;
+            }
+          });
+
+          stream.stream.on('error', (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          });
+
+          fileStream.on('finish', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+
+          fileStream.on('error', (err) => {
+            clearTimeout(timeout);
+            reject(err);
           });
 
           stream.stream.pipe(fileStream);
-          fileStream.on('finish', resolve);
-          fileStream.on('error', reject);
         });
       };
 
@@ -608,6 +638,10 @@ class Downloader {
 
       const ffmpeg = require('fluent-ffmpeg');
       await new Promise((resolve, reject) => {
+        const ffmpegTimeout = setTimeout(() => {
+          reject(new Error('FFmpeg merge timeout'));
+        }, 30000);
+
         ffmpeg()
           .input(tempVideo)
           .input(tempAudio)
@@ -620,10 +654,14 @@ class Downloader {
             console.log(`FFmpeg progress: ${progress.percent?.toFixed(2)}%`);
           })
           .on('end', () => {
+            clearTimeout(ffmpegTimeout);
             console.log("FFmpeg processing complete");
             resolve();
           })
-          .on('error', reject)
+          .on('error', (err) => {
+            clearTimeout(ffmpegTimeout);
+            reject(err);
+          })
           .save(filename);
       });
 
