@@ -7,6 +7,7 @@ const util = require("util");
 const execPromise = util.promisify(exec);
 const axios = require("axios");
 const { spawn } = require("child_process");
+const ytdl = require('ytdl-core');
 
 const app = express();
 const port = 7700;
@@ -556,28 +557,33 @@ class Downloader {
       const filename = `downloads/youtube_${Date.now()}.mp4`;
       console.log("Downloading YouTube video:", url);
 
-      const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "bv*[height<=1080]+ba/b[height<=1080]/best[height<=1080]" --no-warnings`;
-      await execPromise(downloadCommand);
+      const info = await ytdl.getInfo(url);
+      
+      const format = ytdl.chooseFormat(info.formats, { 
+        quality: 'highestvideo',
+        filter: format => format.container === 'mp4' && format.height <= 1080
+      });
 
-      if (!fs.existsSync(filename)) {
-        throw new Error("Download failed: File not found");
-      }
+      const writeStream = fs.createWriteStream(filename);
+      ytdl(url, { format }).pipe(writeStream);
 
-      const { stdout: infoStdout } = await execPromise(`yt-dlp "${url}" --dump-json`);
-      const info = JSON.parse(infoStdout);
+      await new Promise((resolve, reject) => {
+        writeStream.on('finish', resolve);
+        writeStream.on('error', reject);
+      });
 
       return {
         filename,
         metadata: {
-          title: info.title,
-          uploader: info.uploader,
-          uploadDate: info.upload_date,
-          duration: info.duration,
-          viewCount: info.view_count,
-          likeCount: info.like_count,
-          description: info.description,
-          thumbnail: info.thumbnail,
-          quality: info.format_note
+          title: info.videoDetails.title,
+          uploader: info.videoDetails.author.name,
+          uploadDate: info.videoDetails.uploadDate,
+          duration: info.videoDetails.lengthSeconds,
+          viewCount: info.videoDetails.viewCount,
+          likeCount: info.videoDetails.likes,
+          description: info.videoDetails.description,
+          thumbnail: info.videoDetails.thumbnails[0].url,
+          quality: `${format.height}p`
         }
       };
     } catch (error) {
