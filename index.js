@@ -582,32 +582,37 @@ class Downloader {
 
       console.log("Got stream URLs, downloading...");
 
+      const fetch = (await import('node-fetch')).default;
       const downloadFile = async (url, outputPath, type) => {
-        const response = await axios({
-          url,
-          method: 'GET',
-          responseType: 'stream',
-          timeout: 30000,
+        const response = await fetch(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Origin': 'https://www.youtube.com',
+            'Referer': 'https://www.youtube.com/'
           }
         });
 
-        const writer = fs.createWriteStream(outputPath);
-        const totalLength = response.headers['content-length'];
+        if (!response.ok) {
+          throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+        }
 
-        response.data.pipe(writer);
-
+        const fileStream = fs.createWriteStream(outputPath);
+        const total = parseInt(response.headers.get('content-length'), 10);
         let downloaded = 0;
-        response.data.on('data', (chunk) => {
-          downloaded += chunk.length;
-          const percent = ((downloaded / totalLength) * 100).toFixed(2);
-          console.log(`${type} download progress: ${percent}%`);
-        });
 
         return new Promise((resolve, reject) => {
-          writer.on('finish', resolve);
-          writer.on('error', reject);
+          response.body.on('data', (chunk) => {
+            downloaded += chunk.length;
+            const percent = ((downloaded / total) * 100).toFixed(2);
+            console.log(`${type} download progress: ${percent}%`);
+          });
+
+          response.body.pipe(fileStream);
+          fileStream.on('finish', resolve);
+          fileStream.on('error', reject);
         });
       };
 
