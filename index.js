@@ -573,7 +573,23 @@ class Downloader {
           '--merge-output-format', 'mp4'
         ]);
 
+        let errorOutput = '';
+
+        ytdl.stderr.on('data', (data) => {
+          errorOutput += data;
+        });
+
+        ytdl.stdout.on('data', (data) => {
+          console.log(data.toString());
+        });
+
+        const timeout = setTimeout(() => {
+          ytdl.kill();
+          reject(new Error('Download timeout'));
+        }, 30000);
+
         ytdl.on('close', (code) => {
+          clearTimeout(timeout);
           if (code === 0 && fs.existsSync(filename)) {
             resolve({
               filename,
@@ -583,11 +599,12 @@ class Downloader {
               }
             });
           } else {
-            reject(new Error('Download failed'));
+            reject(new Error(errorOutput || 'Download failed'));
           }
         });
 
         ytdl.on('error', (err) => {
+          clearTimeout(timeout);
           reject(err);
         });
       });
