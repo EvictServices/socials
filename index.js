@@ -8,6 +8,9 @@ const execPromise = util.promisify(exec);
 const axios = require("axios");
 const { spawn } = require("child_process");
 const play = require('play-dl');
+const stream = require('stream');
+const { promisify } = require('util');
+const pipeline = promisify(stream.pipeline);
 
 const app = express();
 const port = 7700;
@@ -555,6 +558,9 @@ class Downloader {
   async downloadYoutubeVideo(url) {
     try {
       const filename = `downloads/youtube_${Date.now()}.mp4`;
+      const tempVideo = `${filename}.video.tmp`;
+      const tempAudio = `${filename}.audio.tmp`;
+      
       console.log("Downloading YouTube video:", url);
 
       const info = await play.video_info(url);
@@ -570,24 +576,34 @@ class Downloader {
         })
       ]);
 
-      const writeStream = fs.createWriteStream(filename);
-      
+      await Promise.all([
+        pipeline(
+          video.stream,
+          fs.createWriteStream(tempVideo)
+        ),
+        pipeline(
+          audio.stream,
+          fs.createWriteStream(tempAudio)
+        )
+      ]);
+
       const ffmpeg = require('fluent-ffmpeg');
       await new Promise((resolve, reject) => {
         ffmpeg()
-          .input(video.url)
-          .input(audio.url)
-          .addOption('-c:v copy')
-          .addOption('-c:a aac')
-          .addOption('-strict experimental')
-          .addOption('-reconnect 1')
-          .addOption('-reconnect_streamed 1')
-          .addOption('-reconnect_delay_max 5')
-          .format('mp4')
+          .input(tempVideo)
+          .input(tempAudio)
+          .outputOptions([
+            '-c:v copy',
+            '-c:a aac',
+            '-strict experimental'
+          ])
           .on('end', resolve)
           .on('error', reject)
           .save(filename);
       });
+
+      fs.unlinkSync(tempVideo);
+      fs.unlinkSync(tempAudio);
 
       return {
         filename,
@@ -604,6 +620,13 @@ class Downloader {
         }
       };
     } catch (error) {
+      try {
+        if (fs.existsSync(tempVideo)) fs.unlinkSync(tempVideo);
+        if (fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
+      } catch (cleanupError) {
+        console.error("Cleanup error:", cleanupError);
+      }
+      
       console.error("YouTube download error:", error);
       throw error;
     }
