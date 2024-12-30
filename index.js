@@ -579,17 +579,15 @@ class Downloader {
           errorOutput += data;
         });
 
-        ytdl.stdout.on('data', (data) => {
-          console.log(data.toString());
-        });
-
         const timeout = setTimeout(() => {
           ytdl.kill();
           reject(new Error('Download timeout'));
-        }, 30000);
+        }, 60000);
 
-        ytdl.on('close', (code) => {
+        ytdl.on('close', async (code) => {
           clearTimeout(timeout);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
           if (code === 0 && fs.existsSync(filename)) {
             resolve({
               filename,
