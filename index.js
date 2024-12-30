@@ -1716,22 +1716,6 @@ app.post("/download", authMiddleware, async (req, res) => {
         success: true,
         type: "soundcloud",
         url: audioUrl,
-        metadata: {
-          title: audioData.metadata.title,
-          uploader: audioData.metadata.uploader,
-          stats: {
-            likes: audioData.metadata.likeCount,
-            plays: audioData.metadata.playCount,
-            reposts: audioData.metadata.repostCount,
-            comments: audioData.metadata.commentCount,
-          },
-          thumbnail: audioData.metadata.thumbnail,
-          duration: audioData.metadata.duration,
-          description: audioData.metadata.description,
-          uploadDate: audioData.metadata.uploadDate,
-          genre: audioData.metadata.genre,
-          quality: audioData.metadata.quality,
-        },
         fileInfo: {
           fileName: path.basename(audioData.filename),
           fileSize: fs.statSync(audioData.filename).size,
