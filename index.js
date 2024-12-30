@@ -664,26 +664,25 @@ class Downloader {
 
   async downloadSoundCloudTrack(url) {
     try {
-      const infoCommand = `yt-dlp "${url}" --dump-json`;
-      console.log("Getting track info:", infoCommand);
+      const timestamp = Date.now();
+      const filename = `downloads/soundcloud_${timestamp}.mp3`;
+      
+      const downloadCommand = `yt-dlp "${url}" -f bestaudio -x --audio-format mp3 --audio-quality 0 -o "${filename}" --no-warnings`;
+      await exec(downloadCommand);
 
-      const { stdout } = await execPromise(infoCommand);
-      const info = JSON.parse(stdout);
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      if (info.duration > 300) {
-        throw new Error("Audio exceeds 5 minutes limit");
+      if (!fs.existsSync(filename)) {
+        throw new Error('Download failed');
       }
 
-      const filename = `downloads/soundcloud_${Date.now()}.mp3`;
-      const downloadCommand = `yt-dlp "${url}" -f bestaudio -x --audio-format mp3 --audio-quality 0 -o "${filename}"`;
-      console.log("Executing download command:", downloadCommand);
-
-      await execPromise(downloadCommand);
+      const { stdout } = await exec(`yt-dlp "${url}" --dump-json --no-warnings`);
+      const info = JSON.parse(stdout);
 
       return {
         filename,
         metadata: {
-          title: info.title,
+          title: info.title || "SoundCloud Track",
           uploader: info.uploader,
           likeCount: info.like_count,
           playCount: info.view_count,
@@ -693,8 +692,8 @@ class Downloader {
           duration: info.duration,
           description: info.description,
           uploadDate: info.upload_date,
-          genre: info.genre,
-        },
+          genre: info.genre
+        }
       };
     } catch (error) {
       console.error("Download error:", error);
