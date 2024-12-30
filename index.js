@@ -724,22 +724,26 @@ class Downloader {
               try {
                 if (metadataOutput) {
                   const info = JSON.parse(metadataOutput);
-                  resolve({
-                    filename,
-                    metadata: {
-                      title: info.title,
-                      uploader: info.uploader,
-                      likeCount: info.like_count,
-                      playCount: info.view_count,
-                      repostCount: info.repost_count,
-                      commentCount: info.comment_count,
-                      thumbnail: info.thumbnail,
-                      duration: info.duration,
-                      description: info.description,
-                      uploadDate: info.upload_date,
-                      genre: info.genre
-                    }
-                  });
+                  if (info && typeof info === 'object') {
+                    resolve({
+                      filename,
+                      metadata: {
+                        title: info.title || undefined,
+                        uploader: info.uploader || undefined,
+                        likeCount: info.like_count || undefined,
+                        playCount: info.view_count || undefined,
+                        repostCount: info.repost_count || undefined,
+                        commentCount: info.comment_count || undefined,
+                        thumbnail: info.thumbnail || undefined,
+                        duration: info.duration || undefined,
+                        description: info.description || undefined,
+                        uploadDate: info.upload_date || undefined,
+                        genre: info.genre || undefined
+                      }
+                    });
+                  } else {
+                    resolve({ filename });
+                  }
                 } else {
                   resolve({ filename });
                 }
