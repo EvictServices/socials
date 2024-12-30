@@ -575,6 +575,13 @@ class Downloader {
 
         let errorOutput = '';
 
+        ytdl.stdout.on('data', (data) => {
+          const output = data.toString();
+          if (output.includes('[download]') || output.includes('[Merger]')) {
+            console.log(output.trim());
+          }
+        });
+
         ytdl.stderr.on('data', (data) => {
           errorOutput += data;
         });
