@@ -7,7 +7,7 @@ const util = require("util");
 const execPromise = util.promisify(exec);
 const axios = require("axios");
 const { spawn } = require("child_process");
-const ytdl = require('ytdl-core');
+const play = require('play-dl');
 
 const app = express();
 const port = 7700;
@@ -557,61 +557,33 @@ class Downloader {
       const filename = `downloads/youtube_${Date.now()}.mp4`;
       console.log("Downloading YouTube video:", url);
 
-      const info = await ytdl.getInfo(url);
+      const info = await play.video_info(url);
+      const stream = await play.stream_from_info(info, { quality: 1080 });
+
+      const ffmpeg = require('fluent-ffmpeg');
       
-      const videoFormat = ytdl.chooseFormat(info.formats, {
-        quality: 'highestvideo',
-        filter: format => format.container === 'mp4' && format.height <= 1080 && !format.hasAudio
+      await new Promise((resolve, reject) => {
+        ffmpeg(stream.url)
+          .outputOptions('-c:v copy')
+          .outputOptions('-c:a copy')
+          .toFormat('mp4')
+          .save(filename)
+          .on('end', resolve)
+          .on('error', reject);
       });
-
-      const audioFormat = ytdl.chooseFormat(info.formats, {
-        quality: 'highestaudio',
-        filter: 'audioonly'
-      });
-
-      if (!videoFormat || !audioFormat) {
-        const combinedFormat = ytdl.chooseFormat(info.formats, {
-          quality: 'highest',
-          filter: format => format.container === 'mp4' && format.height <= 1080
-        });
-
-        const writeStream = fs.createWriteStream(filename);
-        ytdl(url, { format: combinedFormat }).pipe(writeStream);
-
-        await new Promise((resolve, reject) => {
-          writeStream.on('finish', resolve);
-          writeStream.on('error', reject);
-        });
-      } else {
-        const ffmpeg = require('fluent-ffmpeg');
-        const videoStream = ytdl(url, { format: videoFormat });
-        const audioStream = ytdl(url, { format: audioFormat });
-
-        await new Promise((resolve, reject) => {
-          ffmpeg()
-            .input(videoStream)
-            .input(audioStream)
-            .outputOptions('-c:v copy')
-            .outputOptions('-c:a aac')
-            .toFormat('mp4')
-            .save(filename)
-            .on('end', resolve)
-            .on('error', reject);
-        });
-      }
 
       return {
         filename,
         metadata: {
-          title: info.videoDetails.title,
-          uploader: info.videoDetails.author.name,
-          uploadDate: info.videoDetails.uploadDate,
-          duration: info.videoDetails.lengthSeconds,
-          viewCount: info.videoDetails.viewCount,
-          likeCount: info.videoDetails.likes,
-          description: info.videoDetails.description,
-          thumbnail: info.videoDetails.thumbnails[0].url,
-          quality: `${videoFormat?.height || 'best'}p`
+          title: info.video_details.title,
+          uploader: info.video_details.channel.name,
+          uploadDate: info.video_details.uploadedAt,
+          duration: info.video_details.durationInSec,
+          viewCount: info.video_details.views,
+          likeCount: info.video_details.likes,
+          description: info.video_details.description,
+          thumbnail: info.video_details.thumbnail.url,
+          quality: '1080p'
         }
       };
     } catch (error) {
