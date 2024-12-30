@@ -7,9 +7,9 @@ const util = require("util");
 const execPromise = util.promisify(exec);
 const axios = require("axios");
 const { spawn } = require("child_process");
-const play = require('play-dl');
-const stream = require('stream');
-const { promisify } = require('util');
+const play = require("play-dl");
+const stream = require("stream");
+const { promisify } = require("util");
 const pipeline = promisify(stream.pipeline);
 
 const app = express();
@@ -110,7 +110,7 @@ class Downloader {
     }
     this.startCleanupSchedule();
     this.cache = new Map();
-    this.cacheTimeout = 3600000; 
+    this.cacheTimeout = 3600000;
   }
 
   startCleanupSchedule() {
@@ -433,7 +433,10 @@ class Downloader {
   async downloadInstagramReel(url) {
     try {
       const cachedResult = this.cache.get(url);
-      if (cachedResult && Date.now() - cachedResult.timestamp < this.cacheTimeout) {
+      if (
+        cachedResult &&
+        Date.now() - cachedResult.timestamp < this.cacheTimeout
+      ) {
         console.log("Returning cached Instagram result");
         return cachedResult.data;
       }
@@ -445,11 +448,11 @@ class Downloader {
       try {
         const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "best"`;
         await execPromise(downloadCommand);
-        
+
         const infoCommand = `yt-dlp "${url}" --dump-json`;
         const { stdout: infoStdout } = await execPromise(infoCommand);
         const info = JSON.parse(infoStdout);
-        
+
         result = {
           filename,
           metadata: {
@@ -461,15 +464,18 @@ class Downloader {
             thumbnail: info.thumbnail,
             duration: info.duration,
             description: info.description,
-            uploadDate: info.upload_date
-          }
+            uploadDate: info.upload_date,
+          },
         };
       } catch (ytdlpError) {
-        console.log('Standard yt-dlp failed, trying yt-dlp with cookies:', ytdlpError.message);
-        
+        console.log(
+          "Standard yt-dlp failed, trying yt-dlp with cookies:",
+          ytdlpError.message
+        );
+
         const cookieCommand = `yt-dlp "${url}" -o "${filename}" -f "best" --cookies instagram_cookies.txt`;
         await execPromise(cookieCommand);
-        
+
         if (!fs.existsSync(filename)) {
           throw new Error("No media file found after cookie attempt");
         }
@@ -489,14 +495,14 @@ class Downloader {
             thumbnail: info.thumbnail,
             duration: info.duration,
             description: info.description,
-            uploadDate: info.upload_date
-          }
+            uploadDate: info.upload_date,
+          },
         };
       }
 
       this.cache.set(url, {
         timestamp: Date.now(),
-        data: result
+        data: result,
       });
 
       return result;
@@ -557,7 +563,7 @@ class Downloader {
 
   async downloadYoutubeVideo(url) {
     try {
-      const downloadDir = path.join(process.cwd(), 'downloads');
+      const downloadDir = path.join(process.cwd(), "downloads");
       if (!fs.existsSync(downloadDir)) {
         fs.mkdirSync(downloadDir, { recursive: true });
       }
@@ -566,54 +572,56 @@ class Downloader {
       const filename = path.join(downloadDir, `youtube_${timestamp}.mp4`);
 
       return new Promise((resolve, reject) => {
-        const ytdl = spawn('yt-dlp', [
+        const ytdl = spawn("yt-dlp", [
           url,
-          '-o', filename,
-          '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
-          '--merge-output-format', 'mp4'
+          "-o",
+          filename,
+          "-f",
+          "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+          "--merge-output-format",
+          "mp4",
         ]);
 
-        let errorOutput = '';
+        let errorOutput = "";
 
-        ytdl.stdout.on('data', (data) => {
+        ytdl.stdout.on("data", (data) => {
           const output = data.toString();
-          if (output.includes('[download]') || output.includes('[Merger]')) {
+          if (output.includes("[download]") || output.includes("[Merger]")) {
             console.log(output.trim());
           }
         });
 
-        ytdl.stderr.on('data', (data) => {
+        ytdl.stderr.on("data", (data) => {
           errorOutput += data;
         });
 
         const timeout = setTimeout(() => {
           ytdl.kill();
-          reject(new Error('Download timeout'));
+          reject(new Error("Download timeout"));
         }, 60000);
 
-        ytdl.on('close', async (code) => {
+        ytdl.on("close", async (code) => {
           clearTimeout(timeout);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
           if (code === 0 && fs.existsSync(filename)) {
             resolve({
               filename,
               metadata: {
                 title: "YouTube Video",
-                quality: "1080p"
-              }
+                quality: "1080p",
+              },
             });
           } else {
-            reject(new Error(errorOutput || 'Download failed'));
+            reject(new Error(errorOutput || "Download failed"));
           }
         });
 
-        ytdl.on('error', (err) => {
+        ytdl.on("error", (err) => {
           clearTimeout(timeout);
           reject(err);
         });
       });
-
     } catch (error) {
       throw error;
     }
@@ -668,23 +676,27 @@ class Downloader {
       const filename = `downloads/soundcloud_${timestamp}.mp3`;
 
       return new Promise((resolve, reject) => {
-        const ytdl = spawn('yt-dlp', [
+        const ytdl = spawn("yt-dlp", [
           url,
-          '-o', filename,
-          '-f', 'bestaudio',
-          '-x',
-          '--audio-format', 'mp3',
-          '--audio-quality', '0'
+          "-o",
+          filename,
+          "-f",
+          "bestaudio",
+          "-x",
+          "--audio-format",
+          "mp3",
+          "--audio-quality",
+          "0",
         ]);
 
-        let errorOutput = '';
+        let errorOutput = "";
 
-        ytdl.stdout.on('data', (data) => {
+        ytdl.stdout.on("data", (data) => {
           const output = data.toString();
-          if (output.includes('[download]')) {
+          if (output.includes("[download]")) {
             console.log(output.trim());
           }
-          if (output.includes('100% of') && output.includes('at')) {
+          if (output.includes("100% of") && output.includes("at")) {
             setTimeout(() => {
               if (fs.existsSync(filename)) {
                 resolve({ filename });
@@ -693,80 +705,31 @@ class Downloader {
           }
         });
 
-        ytdl.stderr.on('data', (data) => {
+        ytdl.stderr.on("data", (data) => {
           errorOutput += data;
         });
 
         const timeout = setTimeout(() => {
           ytdl.kill();
-          reject(new Error('Download timeout'));
+          reject(new Error("Download timeout"));
         }, 60000);
 
-        ytdl.on('close', async (code) => {
+        ytdl.on("close", async (code) => {
           clearTimeout(timeout);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
           if (code === 0 && fs.existsSync(filename)) {
-            const metadataProcess = spawn('yt-dlp', [url, '--dump-json']);
-            let metadataOutput = '';
-            
-            const metadataTimeout = setTimeout(() => {
-              metadataProcess.kill('SIGKILL');
-              resolve({ filename });
-            }, 5000);
-
-            metadataProcess.stdout.on('data', (data) => {
-              metadataOutput += data;
-            });
-
-            metadataProcess.on('close', (code) => {
-              clearTimeout(metadataTimeout);
-              try {
-                if (metadataOutput) {
-                  const info = JSON.parse(metadataOutput);
-                  if (info && typeof info === 'object') {
-                    resolve({
-                      filename,
-                      metadata: {
-                        title: info.title || undefined,
-                        uploader: info.uploader || undefined,
-                        likeCount: info.like_count || undefined,
-                        playCount: info.view_count || undefined,
-                        repostCount: info.repost_count || undefined,
-                        commentCount: info.comment_count || undefined,
-                        thumbnail: info.thumbnail || undefined,
-                        duration: info.duration || undefined,
-                        description: info.description || undefined,
-                        uploadDate: info.upload_date || undefined,
-                        genre: info.genre || undefined
-                      }
-                    });
-                  } else {
-                    resolve({ filename });
-                  }
-                } else {
-                  resolve({ filename });
-                }
-              } catch (e) {
-                resolve({ filename });
-              }
-            });
-
-            metadataProcess.on('error', () => {
-              clearTimeout(metadataTimeout);
-              resolve({ filename });
-            });
+            resolve({ filename });
           } else {
-            reject(new Error(errorOutput || 'Download failed'));
+            reject(new Error(errorOutput || "Download failed"));
           }
         });
 
-        ytdl.on('error', (err) => {
+        ytdl.on("error", (err) => {
           clearTimeout(timeout);
           reject(err);
         });
       });
-
     } catch (error) {
       throw error;
     }
@@ -1518,67 +1481,71 @@ class Downloader {
   }
 
   async downloadInstagramMedia(url) {
-    const outputDir = path.join(__dirname, './downloads');
+    const outputDir = path.join(__dirname, "./downloads");
     const baseFileName = uuidv4();
-    
-    const metadataProcess = await new Promise((resolve, reject) => {
-        const process = spawn(this.galleryDlPath, [
-            url,
-            '--dump-json'
-        ]);
 
-        let jsonData = '';
-        process.stdout.on('data', data => jsonData += data);
-        process.on('close', () => {
-            try {
-                const metadata = JSON.parse(jsonData);
-                resolve(metadata);
-            } catch (e) {
-                resolve(null);
-            }
-        });
+    const metadataProcess = await new Promise((resolve, reject) => {
+      const process = spawn(this.galleryDlPath, [url, "--dump-json"]);
+
+      let jsonData = "";
+      process.stdout.on("data", (data) => (jsonData += data));
+      process.on("close", () => {
+        try {
+          const metadata = JSON.parse(jsonData);
+          resolve(metadata);
+        } catch (e) {
+          resolve(null);
+        }
+      });
     });
 
     const { stdout, stderr } = await new Promise((resolve, reject) => {
-        const process = spawn(this.galleryDlPath, [
-            url,
-            '--range', '1-',
-            '--filename', path.join(outputDir, `${baseFileName}_{num}.{extension}`),
-            '--no-mtime'
-        ]);
+      const process = spawn(this.galleryDlPath, [
+        url,
+        "--range",
+        "1-",
+        "--filename",
+        path.join(outputDir, `${baseFileName}_{num}.{extension}`),
+        "--no-mtime",
+      ]);
 
-        let stdoutData = '';
-        let stderrData = '';
-        process.stdout.on('data', data => stdoutData += data);
-        process.stderr.on('data', data => stderrData += data);
-        process.on('close', code => {
-            if (code !== 0) {
-                reject(new Error(`gallery-dl exited with code ${code}: ${stderrData}`));
-                return;
-            }
-            resolve({ stdout: stdoutData, stderr: stderrData });
-        });
+      let stdoutData = "";
+      let stderrData = "";
+      process.stdout.on("data", (data) => (stdoutData += data));
+      process.stderr.on("data", (data) => (stderrData += data));
+      process.on("close", (code) => {
+        if (code !== 0) {
+          reject(
+            new Error(`gallery-dl exited with code ${code}: ${stderrData}`)
+          );
+          return;
+        }
+        resolve({ stdout: stdoutData, stderr: stderrData });
+      });
     });
 
-    const files = fs.readdirSync(outputDir)
-        .filter(file => file.startsWith(baseFileName))
-        .map(file => path.join(outputDir, file));
+    const files = fs
+      .readdirSync(outputDir)
+      .filter((file) => file.startsWith(baseFileName))
+      .map((file) => path.join(outputDir, file));
 
     if (files.length === 0) {
-        throw new Error('Failed to download Instagram media');
+      throw new Error("Failed to download Instagram media");
     }
 
-    const mediaFiles = files.map(file => ({
-        filename: file,
-        type: path.extname(file).toLowerCase() === '.mp4' ? 'video' : 'image',
-        metadata: metadataProcess ? {
+    const mediaFiles = files.map((file) => ({
+      filename: file,
+      type: path.extname(file).toLowerCase() === ".mp4" ? "video" : "image",
+      metadata: metadataProcess
+        ? {
             title: metadataProcess.title || metadataProcess.description,
             uploader: metadataProcess.uploader,
             timestamp: metadataProcess.timestamp,
             likes: metadataProcess.like_count,
             comments: metadataProcess.comment_count,
-            views: metadataProcess.view_count
-        } : null
+            views: metadataProcess.view_count,
+          }
+        : null,
     }));
 
     return mediaFiles.length === 1 ? mediaFiles[0] : mediaFiles;
@@ -1609,10 +1576,10 @@ app.post("/download", authMiddleware, async (req, res) => {
       console.log("Detected photo post, downloading images...");
       const photoData = await downloader.downloadPhotos(resolvedUrl);
 
-      const photoUrls = photoData.map(photo => {
+      const photoUrls = photoData.map((photo) => {
         return {
           url: `${req.protocol}://${req.get("host")}/${photo.filename}`,
-          metadata: photo.metadata
+          metadata: photo.metadata,
         };
       });
 
@@ -1620,7 +1587,7 @@ app.post("/download", authMiddleware, async (req, res) => {
         success: true,
         type: "photo",
         photos: photoUrls,
-        metadata: photoData[0].metadata
+        metadata: photoData[0].metadata,
       });
     }
 
