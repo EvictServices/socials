@@ -556,142 +556,32 @@ class Downloader {
   }
 
   async downloadYoutubeVideo(url) {
-    let tempVideo = null;
-    let tempAudio = null;
-
     try {
       const filename = `downloads/youtube_${Date.now()}.mp4`;
-      tempVideo = `${filename}.video.tmp`;
-      tempAudio = `${filename}.audio.tmp`;
+      console.log("Trying yt-dlp for YouTube download:", url);
+
+      const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"`;
+      await exec(downloadCommand);
       
-      console.log("Downloading YouTube video:", url);
-
-      const info = await play.video_info(url);
-      console.log("Got video info, starting download...");
+      const infoCommand = `yt-dlp "${url}" --dump-json`;
+      const { stdout: infoStdout } = await exec(infoCommand);
+      const info = JSON.parse(infoStdout);
       
-      const getStreamWithTimeout = async (streamPromise) => {
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Stream timeout')), 10000);
-        });
-        return Promise.race([streamPromise, timeoutPromise]);
-      };
-
-      const [video, audio] = await Promise.all([
-        getStreamWithTimeout(play.stream_from_info(info, { 
-          quality: 137, 
-          type: 'videoonly' 
-        })),
-        getStreamWithTimeout(play.stream_from_info(info, { 
-          quality: 140, 
-          type: 'audioonly' 
-        }))
-      ]);
-
-      console.log("Got streams, downloading...");
-
-      const downloadStream = async (stream, outputPath, type) => {
-        return new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            stream.stream.destroy();
-            reject(new Error(`${type} download timeout`));
-          }, 30000);
-
-          const fileStream = fs.createWriteStream(outputPath);
-          let downloaded = 0;
-          let lastProgress = Date.now();
-
-          stream.stream.on('data', (chunk) => {
-            downloaded += chunk.length;
-            const now = Date.now();
-            if (now - lastProgress > 1000) { 
-              console.log(`${type} download progress: ${(downloaded / 1024 / 1024).toFixed(2)} MB`);
-              lastProgress = now;
-            }
-          });
-
-          stream.stream.on('error', (err) => {
-            clearTimeout(timeout);
-            reject(err);
-          });
-
-          fileStream.on('finish', () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-
-          fileStream.on('error', (err) => {
-            clearTimeout(timeout);
-            reject(err);
-          });
-
-          stream.stream.pipe(fileStream);
-        });
-      };
-
-      console.log("Starting downloads...");
-      await Promise.all([
-        downloadStream(video, tempVideo, 'Video'),
-        downloadStream(audio, tempAudio, 'Audio')
-      ]);
-
-      console.log("Downloads complete, merging files...");
-
-      const ffmpeg = require('fluent-ffmpeg');
-      await new Promise((resolve, reject) => {
-        const ffmpegTimeout = setTimeout(() => {
-          reject(new Error('FFmpeg merge timeout'));
-        }, 30000);
-
-        ffmpeg()
-          .input(tempVideo)
-          .input(tempAudio)
-          .outputOptions([
-            '-c:v copy',
-            '-c:a aac',
-            '-strict experimental'
-          ])
-          .on('progress', progress => {
-            console.log(`FFmpeg progress: ${progress.percent?.toFixed(2)}%`);
-          })
-          .on('end', () => {
-            clearTimeout(ffmpegTimeout);
-            console.log("FFmpeg processing complete");
-            resolve();
-          })
-          .on('error', (err) => {
-            clearTimeout(ffmpegTimeout);
-            reject(err);
-          })
-          .save(filename);
-      });
-
-      if (fs.existsSync(tempVideo)) fs.unlinkSync(tempVideo);
-      if (fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
-
-      console.log("Download and processing complete!");
-
       return {
         filename,
         metadata: {
-          title: info.video_details.title,
-          uploader: info.video_details.channel.name,
-          uploadDate: info.video_details.uploadedAt,
-          duration: info.video_details.durationInSec,
-          viewCount: info.video_details.views,
-          likeCount: info.video_details.likes,
-          description: info.video_details.description,
-          thumbnail: info.video_details.thumbnail.url,
-          quality: '1080p'
+          title: info.title,
+          uploader: info.uploader || info.channel,
+          uploadDate: info.upload_date,
+          duration: info.duration,
+          viewCount: info.view_count,
+          likeCount: info.like_count,
+          description: info.description,
+          thumbnail: info.thumbnail,
+          quality: info.height ? `${info.height}p` : '1080p'
         }
       };
     } catch (error) {
-      try {
-        if (tempVideo && fs.existsSync(tempVideo)) fs.unlinkSync(tempVideo);
-        if (tempAudio && fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
-      } catch (cleanupError) {
-        console.error("Cleanup error:", cleanupError);
-      }
-      
       console.error("YouTube download error:", error);
       throw error;
     }
