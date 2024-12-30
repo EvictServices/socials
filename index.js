@@ -700,25 +700,64 @@ class Downloader {
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           if (code === 0 && fs.existsSync(filename)) {
-            const { stdout } = await exec(`yt-dlp "${url}" --dump-json --no-warnings`);
-            const info = JSON.parse(stdout);
-            
-            resolve({
-              filename,
-              metadata: {
-                title: info.title || "SoundCloud Track",
-                uploader: info.uploader,
-                likeCount: info.like_count,
-                playCount: info.view_count,
-                repostCount: info.repost_count,
-                commentCount: info.comment_count,
-                thumbnail: info.thumbnail,
-                duration: info.duration,
-                description: info.description,
-                uploadDate: info.upload_date,
-                genre: info.genre
-              }
-            });
+            try {
+              const metadataProcess = spawn('yt-dlp', [
+                url,
+                '--dump-json',
+                '--no-warnings'
+              ]);
+
+              let metadataOutput = '';
+              
+              metadataProcess.stdout.on('data', (data) => {
+                metadataOutput += data;
+              });
+
+              metadataProcess.on('close', (code) => {
+                if (code === 0 && metadataOutput) {
+                  try {
+                    const info = JSON.parse(metadataOutput);
+                    resolve({
+                      filename,
+                      metadata: {
+                        title: info.title || "SoundCloud Track",
+                        uploader: info.uploader,
+                        likeCount: info.like_count,
+                        playCount: info.view_count,
+                        repostCount: info.repost_count,
+                        commentCount: info.comment_count,
+                        thumbnail: info.thumbnail,
+                        duration: info.duration,
+                        description: info.description,
+                        uploadDate: info.upload_date,
+                        genre: info.genre
+                      }
+                    });
+                  } catch (parseError) {
+                    resolve({
+                      filename,
+                      metadata: {
+                        title: "SoundCloud Track"
+                      }
+                    });
+                  }
+                } else {
+                  resolve({
+                    filename,
+                    metadata: {
+                      title: "SoundCloud Track"
+                    }
+                  });
+                }
+              });
+            } catch (metadataError) {
+              resolve({
+                filename,
+                metadata: {
+                  title: "SoundCloud Track"
+                }
+              });
+            }
           } else {
             reject(new Error(errorOutput || 'Download failed'));
           }
