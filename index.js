@@ -684,6 +684,13 @@ class Downloader {
           if (output.includes('[download]')) {
             console.log(output.trim());
           }
+          if (output.includes('100% of') && output.includes('at')) {
+            setTimeout(() => {
+              if (fs.existsSync(filename)) {
+                resolve({ filename });
+              }
+            }, 1000);
+          }
         });
 
         ytdl.stderr.on('data', (data) => {
@@ -704,9 +711,9 @@ class Downloader {
             let metadataOutput = '';
             
             const metadataTimeout = setTimeout(() => {
-              metadataProcess.kill();
+              metadataProcess.kill('SIGKILL');
               resolve({ filename });
-            }, 10000);
+            }, 5000);
 
             metadataProcess.stdout.on('data', (data) => {
               metadataOutput += data;
@@ -715,26 +722,35 @@ class Downloader {
             metadataProcess.on('close', (code) => {
               clearTimeout(metadataTimeout);
               try {
-                const info = JSON.parse(metadataOutput);
-                resolve({
-                  filename,
-                  metadata: {
-                    title: info.title,
-                    uploader: info.uploader,
-                    likeCount: info.like_count,
-                    playCount: info.view_count,
-                    repostCount: info.repost_count,
-                    commentCount: info.comment_count,
-                    thumbnail: info.thumbnail,
-                    duration: info.duration,
-                    description: info.description,
-                    uploadDate: info.upload_date,
-                    genre: info.genre
-                  }
-                });
+                if (metadataOutput) {
+                  const info = JSON.parse(metadataOutput);
+                  resolve({
+                    filename,
+                    metadata: {
+                      title: info.title,
+                      uploader: info.uploader,
+                      likeCount: info.like_count,
+                      playCount: info.view_count,
+                      repostCount: info.repost_count,
+                      commentCount: info.comment_count,
+                      thumbnail: info.thumbnail,
+                      duration: info.duration,
+                      description: info.description,
+                      uploadDate: info.upload_date,
+                      genre: info.genre
+                    }
+                  });
+                } else {
+                  resolve({ filename });
+                }
               } catch (e) {
                 resolve({ filename });
               }
+            });
+
+            metadataProcess.on('error', () => {
+              clearTimeout(metadataTimeout);
+              resolve({ filename });
             });
           } else {
             reject(new Error(errorOutput || 'Download failed'));
