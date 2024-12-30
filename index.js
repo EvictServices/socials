@@ -580,37 +580,19 @@ class Downloader {
         })
       ]);
 
-      console.log("Got stream URLs, downloading...");
+      console.log("Got streams, downloading...");
 
-      const fetch = (await import('node-fetch')).default;
-      const downloadFile = async (url, outputPath, type) => {
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': '*/*',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Origin': 'https://www.youtube.com',
-            'Referer': 'https://www.youtube.com/'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Download failed: ${response.status} ${response.statusText}`);
-        }
-
-        const fileStream = fs.createWriteStream(outputPath);
-        const total = parseInt(response.headers.get('content-length'), 10);
-        let downloaded = 0;
-
+      const downloadStream = async (stream, outputPath, type) => {
         return new Promise((resolve, reject) => {
-          response.body.on('data', (chunk) => {
+          const fileStream = fs.createWriteStream(outputPath);
+          let downloaded = 0;
+
+          stream.stream.on('data', (chunk) => {
             downloaded += chunk.length;
-            const percent = ((downloaded / total) * 100).toFixed(2);
-            console.log(`${type} download progress: ${percent}%`);
+            console.log(`${type} download progress: ${(downloaded / 1024 / 1024).toFixed(2)} MB`);
           });
 
-          response.body.pipe(fileStream);
+          stream.stream.pipe(fileStream);
           fileStream.on('finish', resolve);
           fileStream.on('error', reject);
         });
@@ -618,8 +600,8 @@ class Downloader {
 
       console.log("Starting downloads...");
       await Promise.all([
-        downloadFile(video.url, tempVideo, 'Video'),
-        downloadFile(audio.url, tempAudio, 'Audio')
+        downloadStream(video, tempVideo, 'Video'),
+        downloadStream(audio, tempAudio, 'Audio')
       ]);
 
       console.log("Downloads complete, merging files...");
