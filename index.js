@@ -558,18 +558,29 @@ class Downloader {
       console.log("Downloading YouTube video:", url);
 
       const info = await play.video_info(url);
-      const stream = await play.stream_from_info(info, { quality: 1080 });
-
-      const ffmpeg = require('fluent-ffmpeg');
       
+      const [video, audio] = await Promise.all([
+        play.stream_from_info(info, { quality: 1080, type: 'video' }),
+        play.stream_from_info(info, { quality: 'high', type: 'audio' })
+      ]);
+
+      const writeStream = fs.createWriteStream(filename);
+      
+      const ffmpeg = require('fluent-ffmpeg');
       await new Promise((resolve, reject) => {
-        ffmpeg(stream.url)
-          .outputOptions('-c:v copy')
-          .outputOptions('-c:a copy')
-          .toFormat('mp4')
-          .save(filename)
+        ffmpeg()
+          .input(video.url)
+          .input(audio.url)
+          .addOption('-c:v copy')
+          .addOption('-c:a aac')
+          .addOption('-strict experimental')
+          .addOption('-reconnect 1')
+          .addOption('-reconnect_streamed 1')
+          .addOption('-reconnect_delay_max 5')
+          .format('mp4')
           .on('end', resolve)
-          .on('error', reject);
+          .on('error', reject)
+          .save(filename);
       });
 
       return {
@@ -583,7 +594,7 @@ class Downloader {
           likeCount: info.video_details.likes,
           description: info.video_details.description,
           thumbnail: info.video_details.thumbnail.url,
-          quality: '1080p'
+          quality: video.format.quality
         }
       };
     } catch (error) {
@@ -1692,20 +1703,19 @@ app.post("/download", authMiddleware, async (req, res) => {
         success: true,
         type: "youtube",
         url: videoUrl,
-        metadata: {
-          title: videoData.metadata.title,
-          uploader: videoData.metadata.uploader,
-          stats: {
-            likes: videoData.metadata.likeCount,
-            views: videoData.metadata.viewCount,
-            comments: videoData.metadata.commentCount,
-          },
-          thumbnail: videoData.metadata.thumbnail,
-          duration: videoData.metadata.duration,
-          description: videoData.metadata.description,
-          uploadDate: videoData.metadata.uploadDate,
-          quality: videoData.metadata.quality,
+        title: videoData.metadata.title,
+        description: videoData.metadata.description,
+        creator: videoData.metadata.uploader,
+        creatorUrl: videoData.metadata.uploader_url,
+        stats: {
+          likes: videoData.metadata.likeCount,
+          shares: videoData.metadata.repost_count,
+          comments: videoData.metadata.comment_count,
+          views: videoData.metadata.view_count,
         },
+        thumbnail: videoData.metadata.thumbnail,
+        duration: videoData.metadata.duration,
+        uploadDate: videoData.metadata.upload_date,
         fileInfo: {
           fileName: path.basename(videoData.filename),
           fileSize: fs.statSync(videoData.filename).size,
