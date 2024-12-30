@@ -558,27 +558,16 @@ class Downloader {
   async downloadYoutubeVideo(url) {
     try {
       const filename = `downloads/youtube_${Date.now()}.mp4`;
-      console.log("Trying yt-dlp for YouTube download:", url);
+      console.log("Downloading YouTube video:", url);
 
-      const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]"`;
+      const downloadCommand = `yt-dlp "${url}" -o "${filename}" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --no-warnings`;
       await exec(downloadCommand);
-      
-      const infoCommand = `yt-dlp "${url}" --dump-json`;
-      const { stdout: infoStdout } = await exec(infoCommand);
-      const info = JSON.parse(infoStdout);
       
       return {
         filename,
         metadata: {
-          title: info.title,
-          uploader: info.uploader || info.channel,
-          uploadDate: info.upload_date,
-          duration: info.duration,
-          viewCount: info.view_count,
-          likeCount: info.like_count,
-          description: info.description,
-          thumbnail: info.thumbnail,
-          quality: info.height ? `${info.height}p` : '1080p'
+          title: "YouTube Video",
+          quality: "1080p"
         }
       };
     } catch (error) {
