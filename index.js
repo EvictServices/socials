@@ -565,13 +565,19 @@ class Downloader {
       const timestamp = Date.now();
       const baseFilename = path.join(downloadDir, `youtube_${timestamp}`);
 
-      const downloadCommand = `yt-dlp "${url}" -o "${baseFilename}.%(ext)s" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --no-warnings --merge-output-format mp4`;
-      await exec(downloadCommand);
+      const downloadCommand = `yt-dlp "${url}" -o "${baseFilename}.%(ext)s" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --merge-output-format mp4`;
+      const { stdout, stderr } = await exec(downloadCommand);
+      
+      if (stderr) {
+        throw new Error(stderr);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       const files = fs.readdirSync(downloadDir);
       const targetFile = files.find(f => f.startsWith(`youtube_${timestamp}`));
       if (!targetFile) {
-        throw new Error('Download failed');
+        throw new Error(`Download failed: ${stdout}`);
       }
 
       const sourceFile = path.join(downloadDir, targetFile);
@@ -584,7 +590,7 @@ class Downloader {
       }
 
       if (!fs.existsSync(mp4File)) {
-        throw new Error('Download failed');
+        throw new Error('Final conversion failed');
       }
 
       return {
