@@ -564,36 +564,27 @@ class Downloader {
 
       const timestamp = Date.now();
       const baseFilename = path.join(downloadDir, `youtube_${timestamp}`);
-      console.log("Download directory:", downloadDir);
-      console.log("Base filename:", baseFilename);
 
       const downloadCommand = `yt-dlp "${url}" -o "${baseFilename}.%(ext)s" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --no-warnings --merge-output-format mp4`;
-      console.log("Executing command:", downloadCommand);
-      
-      const { stdout, stderr } = await exec(downloadCommand);
-      console.log("yt-dlp stdout:", stdout);
-      if (stderr) console.error("yt-dlp stderr:", stderr);
+      await exec(downloadCommand);
 
       const files = fs.readdirSync(downloadDir);
-      console.log("Files in download directory:", files);
-
       const targetFile = files.find(f => f.startsWith(`youtube_${timestamp}`));
       if (!targetFile) {
-        throw new Error('Download completed but file not found');
+        throw new Error('Download failed');
       }
 
       const sourceFile = path.join(downloadDir, targetFile);
       const mp4File = path.join(downloadDir, `youtube_${timestamp}.mp4`);
 
       if (!sourceFile.endsWith('.mp4')) {
-        console.log("Converting to mp4:", sourceFile);
         const convertCommand = `ffmpeg -i "${sourceFile}" -c copy "${mp4File}" -y`;
         await exec(convertCommand);
         fs.unlinkSync(sourceFile);
       }
 
       if (!fs.existsSync(mp4File)) {
-        throw new Error(`Final MP4 file not found: ${mp4File}`);
+        throw new Error('Download failed');
       }
 
       return {
