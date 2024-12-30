@@ -556,14 +556,18 @@ class Downloader {
   }
 
   async downloadYoutubeVideo(url) {
+    let tempVideo = null;
+    let tempAudio = null;
+
     try {
       const filename = `downloads/youtube_${Date.now()}.mp4`;
-      const tempVideo = `${filename}.video.tmp`;
-      const tempAudio = `${filename}.audio.tmp`;
+      tempVideo = `${filename}.video.tmp`;
+      tempAudio = `${filename}.audio.tmp`;
       
       console.log("Downloading YouTube video:", url);
 
       const info = await play.video_info(url);
+      console.log("Got video info, starting download...");
       
       const [video, audio] = await Promise.all([
         play.stream_from_info(info, { 
@@ -576,16 +580,46 @@ class Downloader {
         })
       ]);
 
+      console.log("Got video and audio streams, downloading...");
+
+      let videoBytes = 0;
+      let audioBytes = 0;
+
+      video.stream.on('data', chunk => {
+        videoBytes += chunk.length;
+        console.log(`Video download progress: ${(videoBytes / 1024 / 1024).toFixed(2)} MB`);
+      });
+
+      audio.stream.on('data', chunk => {
+        audioBytes += chunk.length;
+        console.log(`Audio download progress: ${(audioBytes / 1024 / 1024).toFixed(2)} MB`);
+      });
+
+      const downloadWithTimeout = async (stream, output, type) => {
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error(`${type} download timed out after 60 seconds`));
+          }, 60000);
+
+          pipeline(stream, fs.createWriteStream(output))
+            .then(() => {
+              clearTimeout(timeout);
+              console.log(`${type} download complete`);
+              resolve();
+            })
+            .catch(err => {
+              clearTimeout(timeout);
+              reject(err);
+            });
+        });
+      };
+
       await Promise.all([
-        pipeline(
-          video.stream,
-          fs.createWriteStream(tempVideo)
-        ),
-        pipeline(
-          audio.stream,
-          fs.createWriteStream(tempAudio)
-        )
+        downloadWithTimeout(video.stream, tempVideo, 'Video'),
+        downloadWithTimeout(audio.stream, tempAudio, 'Audio')
       ]);
+
+      console.log("Downloads complete, merging files...");
 
       const ffmpeg = require('fluent-ffmpeg');
       await new Promise((resolve, reject) => {
@@ -597,13 +631,21 @@ class Downloader {
             '-c:a aac',
             '-strict experimental'
           ])
-          .on('end', resolve)
+          .on('progress', progress => {
+            console.log(`FFmpeg progress: ${progress.percent?.toFixed(2)}%`);
+          })
+          .on('end', () => {
+            console.log("FFmpeg processing complete");
+            resolve();
+          })
           .on('error', reject)
           .save(filename);
       });
 
-      fs.unlinkSync(tempVideo);
-      fs.unlinkSync(tempAudio);
+      if (fs.existsSync(tempVideo)) fs.unlinkSync(tempVideo);
+      if (fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
+
+      console.log("Download and processing complete!");
 
       return {
         filename,
@@ -621,8 +663,8 @@ class Downloader {
       };
     } catch (error) {
       try {
-        if (fs.existsSync(tempVideo)) fs.unlinkSync(tempVideo);
-        if (fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
+        if (tempVideo && fs.existsSync(tempVideo)) fs.unlinkSync(tempVideo);
+        if (tempAudio && fs.existsSync(tempAudio)) fs.unlinkSync(tempAudio);
       } catch (cleanupError) {
         console.error("Cleanup error:", cleanupError);
       }
@@ -1755,7 +1797,7 @@ app.post("/download", authMiddleware, async (req, res) => {
 
     if (resolvedUrl.includes("instagram.com")) {
       console.log("Detected Instagram URL, fetching video...");
-      const reelData = await downloader.downloadInstagramReel(resolvedUrl);
+      const reelData = await downloader.downloadInstagramMedia(resolvedUrl);
 
       const videoUrl = `${req.protocol}://${req.get(
         "host"
