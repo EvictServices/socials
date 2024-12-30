@@ -560,8 +560,14 @@ class Downloader {
       const info = await play.video_info(url);
       
       const [video, audio] = await Promise.all([
-        play.stream_from_info(info, { quality: 1080, type: 'video' }),
-        play.stream_from_info(info, { quality: 'high', type: 'audio' })
+        play.stream_from_info(info, { 
+          quality: 137, 
+          type: 'videoonly' 
+        }),
+        play.stream_from_info(info, { 
+          quality: 140, 
+          type: 'audioonly' 
+        })
       ]);
 
       const writeStream = fs.createWriteStream(filename);
@@ -594,7 +600,7 @@ class Downloader {
           likeCount: info.video_details.likes,
           description: info.video_details.description,
           thumbnail: info.video_details.thumbnail.url,
-          quality: video.format.quality
+          quality: '1080p'
         }
       };
     } catch (error) {
