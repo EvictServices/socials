@@ -563,45 +563,36 @@ class Downloader {
       }
 
       const timestamp = Date.now();
-      const baseFilename = path.join(downloadDir, `youtube_${timestamp}`);
+      const filename = path.join(downloadDir, `youtube_${timestamp}.mp4`);
 
-      const downloadCommand = `yt-dlp "${url}" -o "${baseFilename}.%(ext)s" -f "bestvideo[height<=1080]+bestaudio/best[height<=1080]" --merge-output-format mp4`;
-      const { stdout, stderr } = await exec(downloadCommand);
-      
-      if (stderr && stderr.toString()) {
-        throw new Error(stderr.toString());
-      }
+      return new Promise((resolve, reject) => {
+        const ytdl = spawn('yt-dlp', [
+          url,
+          '-o', filename,
+          '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+          '--merge-output-format', 'mp4'
+        ]);
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+        ytdl.on('close', (code) => {
+          if (code === 0 && fs.existsSync(filename)) {
+            resolve({
+              filename,
+              metadata: {
+                title: "YouTube Video",
+                quality: "1080p"
+              }
+            });
+          } else {
+            reject(new Error('Download failed'));
+          }
+        });
 
-      const files = fs.readdirSync(downloadDir);
-      const targetFile = files.find(f => f.startsWith(`youtube_${timestamp}`));
-      if (!targetFile) {
-        throw new Error(stdout.toString() || 'Download failed');
-      }
+        ytdl.on('error', (err) => {
+          reject(err);
+        });
+      });
 
-      const sourceFile = path.join(downloadDir, targetFile);
-      const mp4File = path.join(downloadDir, `youtube_${timestamp}.mp4`);
-
-      if (!sourceFile.endsWith('.mp4')) {
-        const convertCommand = `ffmpeg -i "${sourceFile}" -c copy "${mp4File}" -y`;
-        await exec(convertCommand);
-        fs.unlinkSync(sourceFile);
-      }
-
-      if (!fs.existsSync(mp4File)) {
-        throw new Error('Final conversion failed');
-      }
-
-      return {
-        filename: mp4File,
-        metadata: {
-          title: "YouTube Video",
-          quality: "1080p"
-        }
-      };
     } catch (error) {
-      console.error("YouTube download error:", error.message || error);
       throw error;
     }
   }
