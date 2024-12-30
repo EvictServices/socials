@@ -559,18 +559,46 @@ class Downloader {
 
       const info = await ytdl.getInfo(url);
       
-      const format = ytdl.chooseFormat(info.formats, { 
+      const videoFormat = ytdl.chooseFormat(info.formats, {
         quality: 'highestvideo',
-        filter: format => format.container === 'mp4' && format.height <= 1080
+        filter: format => format.container === 'mp4' && format.height <= 1080 && !format.hasAudio
       });
 
-      const writeStream = fs.createWriteStream(filename);
-      ytdl(url, { format }).pipe(writeStream);
-
-      await new Promise((resolve, reject) => {
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
+      const audioFormat = ytdl.chooseFormat(info.formats, {
+        quality: 'highestaudio',
+        filter: 'audioonly'
       });
+
+      if (!videoFormat || !audioFormat) {
+        const combinedFormat = ytdl.chooseFormat(info.formats, {
+          quality: 'highest',
+          filter: format => format.container === 'mp4' && format.height <= 1080
+        });
+
+        const writeStream = fs.createWriteStream(filename);
+        ytdl(url, { format: combinedFormat }).pipe(writeStream);
+
+        await new Promise((resolve, reject) => {
+          writeStream.on('finish', resolve);
+          writeStream.on('error', reject);
+        });
+      } else {
+        const ffmpeg = require('fluent-ffmpeg');
+        const videoStream = ytdl(url, { format: videoFormat });
+        const audioStream = ytdl(url, { format: audioFormat });
+
+        await new Promise((resolve, reject) => {
+          ffmpeg()
+            .input(videoStream)
+            .input(audioStream)
+            .outputOptions('-c:v copy')
+            .outputOptions('-c:a aac')
+            .toFormat('mp4')
+            .save(filename)
+            .on('end', resolve)
+            .on('error', reject);
+        });
+      }
 
       return {
         filename,
@@ -583,7 +611,7 @@ class Downloader {
           likeCount: info.videoDetails.likes,
           description: info.videoDetails.description,
           thumbnail: info.videoDetails.thumbnails[0].url,
-          quality: `${format.height}p`
+          quality: `${videoFormat?.height || 'best'}p`
         }
       };
     } catch (error) {
