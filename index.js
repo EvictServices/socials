@@ -666,37 +666,71 @@ class Downloader {
     try {
       const timestamp = Date.now();
       const filename = `downloads/soundcloud_${timestamp}.mp3`;
-      
-      const downloadCommand = `yt-dlp "${url}" -f bestaudio -x --audio-format mp3 --audio-quality 0 -o "${filename}" --no-warnings`;
-      await exec(downloadCommand);
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      return new Promise((resolve, reject) => {
+        const ytdl = spawn('yt-dlp', [
+          url,
+          '-o', filename,
+          '-f', 'bestaudio',
+          '-x',
+          '--audio-format', 'mp3',
+          '--audio-quality', '0'
+        ]);
 
-      if (!fs.existsSync(filename)) {
-        throw new Error('Download failed');
-      }
+        let errorOutput = '';
 
-      const { stdout } = await exec(`yt-dlp "${url}" --dump-json --no-warnings`);
-      const info = JSON.parse(stdout);
+        ytdl.stdout.on('data', (data) => {
+          const output = data.toString();
+          if (output.includes('[download]')) {
+            console.log(output.trim());
+          }
+        });
 
-      return {
-        filename,
-        metadata: {
-          title: info.title || "SoundCloud Track",
-          uploader: info.uploader,
-          likeCount: info.like_count,
-          playCount: info.view_count,
-          repostCount: info.repost_count,
-          commentCount: info.comment_count,
-          thumbnail: info.thumbnail,
-          duration: info.duration,
-          description: info.description,
-          uploadDate: info.upload_date,
-          genre: info.genre
-        }
-      };
+        ytdl.stderr.on('data', (data) => {
+          errorOutput += data;
+        });
+
+        const timeout = setTimeout(() => {
+          ytdl.kill();
+          reject(new Error('Download timeout'));
+        }, 60000);
+
+        ytdl.on('close', async (code) => {
+          clearTimeout(timeout);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          if (code === 0 && fs.existsSync(filename)) {
+            const { stdout } = await exec(`yt-dlp "${url}" --dump-json --no-warnings`);
+            const info = JSON.parse(stdout);
+            
+            resolve({
+              filename,
+              metadata: {
+                title: info.title || "SoundCloud Track",
+                uploader: info.uploader,
+                likeCount: info.like_count,
+                playCount: info.view_count,
+                repostCount: info.repost_count,
+                commentCount: info.comment_count,
+                thumbnail: info.thumbnail,
+                duration: info.duration,
+                description: info.description,
+                uploadDate: info.upload_date,
+                genre: info.genre
+              }
+            });
+          } else {
+            reject(new Error(errorOutput || 'Download failed'));
+          }
+        });
+
+        ytdl.on('error', (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+      });
+
     } catch (error) {
-      console.error("Download error:", error);
       throw error;
     }
   }
