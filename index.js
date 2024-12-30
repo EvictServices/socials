@@ -690,17 +690,23 @@ class Downloader {
         ]);
 
         let errorOutput = "";
+        let isResolved = false;
+
+        const resolveOnce = (data) => {
+          if (!isResolved && fs.existsSync(filename)) {
+            isResolved = true;
+            resolve(data);
+          }
+        };
 
         ytdl.stdout.on("data", (data) => {
           const output = data.toString();
           if (output.includes("[download]")) {
             console.log(output.trim());
           }
-          if (output.includes("100% of") && output.includes("at")) {
+          if (output.includes("100% of")) {
             setTimeout(() => {
-              if (fs.existsSync(filename)) {
-                resolve({ filename });
-              }
+              resolveOnce({ filename });
             }, 1000);
           }
         });
@@ -711,23 +717,27 @@ class Downloader {
 
         const timeout = setTimeout(() => {
           ytdl.kill();
-          reject(new Error("Download timeout"));
+          if (!isResolved) {
+            reject(new Error("Download timeout"));
+          }
         }, 60000);
 
-        ytdl.on("close", async (code) => {
+        ytdl.on("close", (code) => {
           clearTimeout(timeout);
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-
-          if (code === 0 && fs.existsSync(filename)) {
-            resolve({ filename });
-          } else {
-            reject(new Error(errorOutput || "Download failed"));
-          }
+          setTimeout(() => {
+            if (code === 0 && fs.existsSync(filename)) {
+              resolveOnce({ filename });
+            } else if (!isResolved) {
+              reject(new Error(errorOutput || "Download failed"));
+            }
+          }, 1000);
         });
 
         ytdl.on("error", (err) => {
           clearTimeout(timeout);
-          reject(err);
+          if (!isResolved) {
+            reject(err);
+          }
         });
       });
     } catch (error) {
